@@ -374,23 +374,29 @@ not (yet) handle more complex Media Wiki features, such as the "pipe trick":
                         #:link-defns #hash()
                         #:footnote-defns #hash()))
       (process-emphasis (list label-node)))
-    
-    (match (string-split inner-text #px"\\|" #:trim? #f #:repeat? #f)
-      ; The following rules are based on the behavior of MediaWiki:
-      ; 1. "[[]]" is not parsed as link.
-      [(list) "[[]]"]
-      ; 2. "[[Link]]" is parsed as link with target and label "Link".
-      [(list target) (wikilink (process-label target) target)]
-      ; 3. "[[|Link]]" is not parsed as link.
-      [(list "" _) (string-append "[[" inner-text "]]")]
-      ; 4. "[[Link|]]" is parsed as "[[Link]]" (see rule 2).
-      [(list target "") (wikilink (process-label target) target)]
-      ; 5. "[[Link|Label]]" is parsed as link with target "Link" and label "Label".
-      [(list target label) (wikilink (process-label label) target)]
-      ; 6. "[[Link|La|bel]]" is parsed as link with target "Link" and label "La|bel".
-      [(list* target label-parts)
-       (let ([label (string-join label-parts "|")])
-         (wikilink (process-label label) target))]))
+
+    (define (string-split-on-first str char)
+      (define char-pos
+        (for/first
+            ([p (in-naturals)]
+             [c (in-string str)]
+             #:when (char=? char c))
+          p))
+
+      (if char-pos
+          (let ([head (substring str 0 char-pos)]
+                [tail (substring str (add1 char-pos))])
+            (cons head tail))
+          (cons str "")))
+
+    (match (string-split-on-first inner-text #\|)
+      ; "[[]]" and "[[|Link]" are not parsed as links.
+      [(cons "" _) (string-append "[[" inner-text "]]")]
+      ; "[[Link]]" and "[[Link|]]" are parsed as links with target and link "Link".
+      [(cons target+label "") (wikilink (process-label target+label) target+label)]
+      ; "[[Target|Label]]" is parsed as link with target "Target" and label "Label".
+      ; "[[Target|La|bel]]" is parsed as link with target "Target" and label "La|bel".
+      [(cons target label) (wikilink (process-label label) target)]))
 
   (define (try-read-link-target content-label-str)
     (or
