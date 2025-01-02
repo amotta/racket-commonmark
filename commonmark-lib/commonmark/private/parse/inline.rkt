@@ -376,10 +376,21 @@ not (yet) handle more complex Media Wiki features, such as the "pipe trick":
       (process-emphasis (list label-node)))
     
     (match (string-split inner-text #px"\\|" #:trim? #f #:repeat? #f)
-      [(list target label) (wikilink (process-label label) target)]
+      ; The following rules are based on the behavior of MediaWiki:
+      ; 1. "[[]]" is not parsed as link.
+      [(list) "[[]]"]
+      ; 2. "[[Link]]" is parsed as link with target and label "Link".
       [(list target) (wikilink (process-label target) target)]
-      ; MediaWiki does not parse the string "[[]]" as link.
-      [(list) "[[]]"]))
+      ; 3. "[[|Link]]" is not parsed as link.
+      [(list "" _) (string-append "[[" inner-text "]]")]
+      ; 4. "[[Link|]]" is parsed as "[[Link]]" (see rule 2).
+      [(list target "") (wikilink (process-label target) target)]
+      ; 5. "[[Link|Label]]" is parsed as link with target "Link" and label "Label".
+      [(list target label) (wikilink (process-label label) target)]
+      ; 6. "[[Link|La|bel]]" is parsed as link with target "Link" and label "La|bel".
+      [(list* target label-parts)
+       (let ([label (string-join label-parts "|")])
+         (wikilink (process-label label) target))]))
 
   (define (try-read-link-target content-label-str)
     (or
